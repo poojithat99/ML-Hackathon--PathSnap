@@ -1,0 +1,15 @@
+{
+  "final_fit_seconds": 0.06325737499901152,
+  "macro_f1": 0.9263124336272922,
+  "weighted_f1": 0.9572888453649864,
+  "micro_f1": 0.9428313627697682,
+  "top1": 0.9428313627697682,
+  "macro_precision": 0.9328173455753177,
+  "macro_recall": 0.9243367161032191,
+  "candidate_recall": 0.9981603591017446,
+  "mean_candidates": 6.98595626533812,
+  "candidate_log_loss": 0.22790755899169596,
+  "continuity": 0.9446388670652004,
+  "sequence_similarity": 0.850628111027552,
+  "inference_seconds": 0.018030354199981957
+}

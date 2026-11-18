@@ -1,0 +1,16 @@
+{
+  "stages": {
+    "original_classifier": "original_classifier",
+    "original_pipeline": "original_pipeline",
+    "best_features": "feature_heading",
+    "best_candidates": "sampled_16_35m",
+    "best_classifier": "model_logistic",
+    "best_hyperparameters": "trial_6",
+    "default_decoder": "decoder_default",
+    "best_decoder": "decoder_motion_gap_6",
+    "final": "decoder_motion_gap_6"
+  },
+  "decoder_cv_floor_met": true,
+  "tuning_seconds": 2.8772347499907482,
+  "selection": "training CV only"
+}

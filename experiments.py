@@ -46,16 +46,16 @@ PARAMETERS = {
 }
 
 
-def make_model(name, overrides=None):
+def make_model(name, overrides=None, seed=SEED):
     params = PARAMETERS[name] | (overrides or {})
     if name.startswith("logistic"):
         return make_pipeline(StandardScaler(), LogisticRegression(
-            max_iter=150, random_state=SEED, **params))
+            max_iter=150, random_state=seed, **params))
     if name == "naive_bayes":
         return GaussianNB(**params)
     estimator = {"tree": DecisionTreeClassifier, "extra_trees": ExtraTreesClassifier,
                  "random_forest": RandomForestClassifier}.get(name, HistGradientBoostingClassifier)
-    return estimator(random_state=SEED, **params)
+    return estimator(random_state=seed, **params)
 
 
 def fit_model(model, records):
