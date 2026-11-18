@@ -1,4 +1,5 @@
 import argparse
+import csv
 import json
 from pathlib import Path
 
@@ -10,7 +11,7 @@ import numpy as np
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 
-from pathsnap import DATA, decode, load_trip, probabilities
+from pathsnap import DATA, CandidateConfig, DecoderConfig, decode, load_trip, probabilities
 
 
 def comparison_chart(results):
@@ -34,7 +35,7 @@ def comparison_chart(results):
     plt.close(figure)
 
 
-def development_map(results, trip_id):
+def development_map(results, trip_id, improved=None):
     folder = DATA / "student_test" / trip_id
     trip = load_trip(folder)
     model = joblib.load(results / "model.joblib")
@@ -43,11 +44,20 @@ def development_map(results, trip_id):
     gps = trip.track[:, :2]
     map_view = folium.Map(location=gps[:, ::-1].mean(axis=0).tolist())
     figure, axis = plt.subplots(figsize=(9, 6), layout="constrained")
-    for name, color, arc_ids, weight in (
+    layers = [
         ("Nearby roads", "#999999", np.unique(trip.candidates), 1),
         ("Reference route", "#cc5c13", np.unique(reference), 5),
-        ("Predicted route", "#087f5b", np.unique(predicted), 2),
-    ):
+        ("Baseline predicted route" if improved else "Predicted route",
+         "#845ef7", np.unique(predicted), 3),
+    ]
+    if improved:
+        config = json.loads((improved / "config.json").read_text())
+        revised_trip = load_trip(folder, CandidateConfig(**config["candidates"]), config["features"])
+        revised_model = joblib.load(improved / "model.joblib")
+        revised = decode(revised_trip, probabilities(revised_model, revised_trip),
+                         DecoderConfig(**config["decoder"]))
+        layers.append(("Improved predicted route", "#087f5b", np.unique(revised), 2))
+    for name, color, arc_ids, weight in layers:
         segments = trip.nodes[trip.arcs[arc_ids]]
         layer = folium.FeatureGroup(name=name).add_to(map_view)
         folium.PolyLine(segments[:, :, ::-1].tolist(), color=color, weight=weight).add_to(layer)
@@ -64,8 +74,46 @@ def development_map(results, trip_id):
     axis.legend()
     folium.LayerControl().add_to(map_view)
     map_view.fit_bounds([gps[:, ::-1].min(axis=0).tolist(), gps[:, ::-1].max(axis=0).tolist()])
-    map_view.save(str(results / "development_map.html"))
-    figure.savefig(results / "development_route.png", dpi=150)
+    destination = improved or results
+    map_view.save(str(destination / "development_map.html"))
+    figure.savefig(destination / "development_route.png", dpi=150)
+    plt.close(figure)
+
+
+def experiment_charts(output):
+    rows = json.loads((output / "experiments.json").read_text())
+    selection = json.loads((output / "selection.json").read_text())["stages"]
+    stages = {
+        "feature_ablation": (["original_classifier"] + [key for key, row in rows.items()
+                            if row["stage"] == "feature"], ("macro_f1", "top1")),
+        "candidate_comparison": ([selection["best_features"]] + [key for key, row in rows.items()
+                                if row["stage"] == "candidate"], ("candidate_recall", "macro_f1", "top1")),
+        "classifier_comparison": ([key for key, row in rows.items() if row["stage"] == "model"],
+                                  ("macro_f1", "top1", "continuity")),
+        "decoder_sensitivity": ([key for key, row in rows.items() if row["stage"] == "decoder"],
+                                ("macro_f1", "top1", "continuity")),
+    }
+    for title, (keys, metrics) in stages.items():
+        figure, axes = plt.subplots(1, len(metrics), figsize=(4 * len(metrics), 5), layout="constrained")
+        for axis, metric in zip(axes, metrics):
+            axis.barh(keys[::-1], [rows[key]["cv"][metric] for key in reversed(keys)], color="#147d75")
+            axis.set(xlim=(0, 1), xlabel=f"CV {metric.replace('_', ' ')}")
+        figure.savefig(output / f"{title}.png", dpi=150)
+        plt.close(figure)
+    figure, axes = plt.subplots(1, 3, figsize=(12, 5), layout="constrained")
+    data = {}
+    for identifier in ("original_pipeline", selection["final"]):
+        with (output / f"{identifier}_student_trips.csv").open() as handle:
+            data[identifier] = list(csv.DictReader(handle))
+    for axis, metric in zip(axes, ("macro_f1", "top1", "continuity")):
+        for identifier, trips in data.items():
+            axis.scatter([float(trip[metric]) for trip in trips],
+                         [trip["trip_id"] for trip in trips],
+                         label="Baseline" if identifier == "original_pipeline" else "Selected",
+                         alpha=.8)
+        axis.set(xlim=(0, 1.02), xlabel=f"Student-test {metric.replace('_', ' ')}")
+    axes[0].legend()
+    figure.savefig(output / "per_trip_comparison.png", dpi=150)
     plt.close(figure)
 
 
@@ -73,7 +121,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--trip", default="00000007", choices=sorted(
         folder.name for folder in (DATA / "student_test").iterdir() if folder.is_dir()))
+    parser.add_argument("--improved", type=Path)
     args = parser.parse_args()
     results = Path("results")
-    comparison_chart(results)
-    development_map(results, args.trip)
+    if args.improved:
+        experiment_charts(args.improved)
+    else:
+        comparison_chart(results)
+    development_map(results, args.trip, args.improved)
