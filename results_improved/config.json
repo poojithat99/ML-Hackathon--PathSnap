@@ -1,0 +1,15 @@
+{
+  "model": "logistic",
+  "features": "heading",
+  "candidates": {
+    "count": 16,
+    "radius_m": 35,
+    "index": "sampled"
+  },
+  "decoder": {
+    "gap_seconds": 6,
+    "jump_penalty": 4.0,
+    "emission_weight": 1.0,
+    "motion_weight": 1.5
+  }
+}

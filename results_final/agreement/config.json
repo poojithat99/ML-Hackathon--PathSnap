@@ -1,0 +1,23 @@
+{
+  "model": "logistic",
+  "parameters": {
+    "C": 0.011825176269334062
+  },
+  "overrides": {
+    "C": 0.011825176269334062
+  },
+  "features": "heading",
+  "candidates": {
+    "count": 16,
+    "radius_m": 35,
+    "index": "sampled"
+  },
+  "decoder": {
+    "gap_seconds": 6,
+    "jump_penalty": 4.0,
+    "emission_weight": 1.0,
+    "motion_weight": 1.5,
+    "endpoint_scale_m": 15,
+    "refine_predicted_route": true
+  }
+}

@@ -2,74 +2,250 @@
 <html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PathSnap • Route Evaluation</title>
+<title>PathSnap | Route Intelligence</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous">
 <style>
-body { font: 16px system-ui, sans-serif; max-width: 960px; margin: 3rem auto; padding: 0 1rem; color: #172b36; background: #f5f8fa; }
-input, button, select { font: inherit; padding: .5rem; margin: .25rem; }
-svg { width: 100%; background: white; border: 1px solid #d5dfe4; border-radius: 10px; }
+:root { color-scheme:dark; font: 15px system-ui,sans-serif; background:#0b111c; color:#e9f1ff; }
+* {box-sizing:border-box} body {margin:0} main {min-height:100vh; display:grid; grid-template-columns:320px minmax(0,1fr)}
+aside {padding:26px; background:#101a29; border-right:1px solid #27364b}
+header {display:flex; align-items:center; gap:12px; margin-bottom:26px}
+.logo {display:grid; place-items:center; width:44px; height:44px; border-radius:12px; background:#53e6b3; color:#08271f; font-weight:900}
+h1,h2,p {margin:0} h1 {font-size:24px} h2 {font-size:clamp(22px,3vw,34px)}
+.muted,small,label {color:#a9b8ce} .eyebrow {color:#53e6b3; font-size:11px; letter-spacing:.14em; font-weight:750}
+.connection {display:block; padding:9px 12px; margin-bottom:16px; border:1px solid #32425b; border-radius:8px; color:#a9b8ce}
+.connection[data-live=true] {color:#53e6b3}
+label {display:block; margin:12px 0 6px} input,select,button {font:inherit; width:100%; border-radius:8px; padding:10px; border:1px solid #34465f; background:#162437; color:inherit}
+button {cursor:pointer; font-weight:700; margin-top:10px} button.primary {background:#53e6b3;color:#08271f;border:0} button:disabled {opacity:.45;cursor:default}
+button:focus-visible,input:focus-visible,select:focus-visible {outline:2px solid #53e6b3;outline-offset:2px}
+.detail {margin-top:20px; font-size:13px; line-height:1.55}
+article {padding:clamp(18px,3vw,38px); min-width:0} .heading {display:flex; flex-wrap:wrap; justify-content:space-between; align-items:end; gap:10px; margin-bottom:18px}
+#status {color:#a9b8ce; min-height:1.3em}
+.canvas {position:relative; overflow:hidden; border-radius:14px; border:1px solid #2b3d56; background:#101b2c}
+#map {width:100%; height:clamp(340px,62vh,760px); background:#dce4ea; color:#142035; color-scheme:light}
+#map-note {font-size:13px; color:#ffcf89; padding:10px 16px; border-top:1px solid #2b3d56}
+.legend {display:flex; flex-wrap:wrap; align-items:center; gap:10px 16px; padding:10px 16px; border-top:1px solid #2b3d56; font-size:13px}
+.legend label {display:flex; align-items:center; gap:6px; margin:0} .legend input {width:auto}
+.legend button {width:auto; margin:0 0 0 auto; padding:6px 10px}
+.swatch {width:14px;height:4px;border-radius:4px;background:var(--ink)} .gps {--ink:#9b72ff}.classifier {--ink:#f97316}.viterbi {--ink:#0284e8}
+.metrics {margin-top:14px; display:grid; grid-template-columns:repeat(auto-fit,minmax(144px,1fr)); gap:9px}
+.card {border:1px solid #2b3d56; border-radius:10px; padding:12px; background:#101a29}
+.card strong {display:block; font-size:21px; margin-top:5px} [hidden] {display:none!important}
+footer {margin-top:12px; font-size:12px}
+@media(max-width:780px){ main {grid-template-columns:1fr} aside {border-right:0;border-bottom:1px solid #27364b} header {margin-bottom:12px} }
 </style>
-<h1>PathSnap</h1>
-<label>API address <input id="address" value="http://127.0.0.1:8000"></label>
-<button id="connect">Load trips</button>
-<label>Trip <select id="trips"></select></label>
-<button id="run" disabled>Match route</button>
-<p id="status" role="status">Connect to the API to get started.</p>
-<p><span style="color:#4263eb">● GPS</span> · <span style="color:#087f5b">━ Predicted road segments</span></p>
-<svg id="map" viewBox="0 0 900 530" aria-label="GPS and predicted route"></svg>
+<main>
+<aside>
+  <header><span class="logo" aria-hidden="true">PS</span><div><h1>PathSnap</h1><p class="muted">Map-matching console</p></div></header>
+  <span id="connection" class="connection">○ API not connected</span>
+  <label for="address">API address</label><input id="address" type="url" spellcheck="false">
+  <button id="connect">Load trips</button>
+  <label for="trips">Trip</label><select id="trips" disabled></select>
+  <label for="model">Model configuration</label><select id="model"><option value="improved">Improved</option><option value="original">Original</option><option value="best">Best continuity-constrained</option><option value="agreement">Highest CV agreement</option></select>
+  <label for="mode">Prediction mode</label><select id="mode"><option value="viterbi">Viterbi decoded</option><option value="classifier">Classifier only</option><option value="compare">Compare both</option></select>
+  <button class="primary" id="run" disabled>Match route</button>
+  <p class="detail muted">Switch configurations and rerun the same trip to compare models. No reference geometry is sent to this dashboard.</p>
+</aside>
+<article>
+  <div class="heading"><div><p class="eyebrow">ROUTE ANALYSIS · PER TRIP</p><h2 id="title">Select a trip</h2></div><p id="status" role="status">Connect to the API to begin.</p></div>
+  <div class="canvas">
+    <div id="map" role="region" aria-label="Interactive trip map"></div>
+    <p id="map-note" role="status" hidden></p>
+    <div class="legend">
+      <label><input type="checkbox" id="gps-toggle" checked><span class="swatch gps"></span>GPS observations</label>
+      <label><input type="checkbox" id="classifier-toggle" checked><span class="swatch classifier"></span>Classifier only</label>
+      <label><input type="checkbox" id="viterbi-toggle" checked><span class="swatch viterbi"></span>Viterbi decoded</label>
+      <button id="fit-trip" type="button" disabled>Fit trip</button>
+    </div>
+  </div>
+  <section id="metrics" class="metrics" aria-label="Per-trip metrics" aria-live="polite"></section>
+  <footer class="muted">Per-trip scores only · Agreement and macro F1 appear only when proxy-label scoring is enabled.</footer>
+</article>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
 <script>
-const address = document.querySelector('#address');
-const trips = document.querySelector('#trips');
-const statusLine = document.querySelector('#status');
-const map = document.querySelector('#map');
-const run = document.querySelector('#run');
-async function request(path) {
-  const response = await fetch(address.value.trim().replace(/\/$/, '') + path);
-  if (!response.ok) throw Error('API returned HTTP ' + response.status);
+const lookup = id => document.getElementById(id);
+const address = lookup('address'), trips = lookup('trips'), model = lookup('model'), mode = lookup('mode');
+address.value = new URLSearchParams(location.search).get('api') ||
+  `${location.protocol}//${location.hostname}:8000`;
+const statusLine = lookup('status'), title = lookup('title'), run = lookup('run'), connect = lookup('connect');
+const connection = lookup('connection'), metrics = lookup('metrics');
+const mapNote = lookup('map-note'), fitTrip = lookup('fit-trip');
+const layerStyles = {
+  gps: {color:'#7c3aed', weight:3, dashArray:'4 6'},
+  classifier: {color:'#f97316', weight:7},
+  viterbi: {color:'#0284e8', weight:4},
+};
+const map = window.L ? L.map('map', {preferCanvas:true}).setView([0,0], 2) : null;
+const layers = {};
+let tripBounds = null;
+let tileFailed = false;
+let mapEmpty = false;
+function updateMapNote() {
+  mapNote.textContent = !map ? 'The map library could not load. Check internet access and reload; trip metrics are still available.'
+    : mapEmpty ? 'No valid geographic coordinates were returned for this trip.'
+    : tileFailed ? 'Some OpenStreetMap tiles could not load. GPS and predicted routes are still available.' : '';
+  mapNote.hidden = !mapNote.textContent;
+}
+if (map) {
+  for (const [index, key] of Object.keys(layerStyles).entries()) {
+    const toggle = lookup(key+'-toggle');
+    map.createPane(key).style.zIndex = 410 + index;
+    layers[key] = L.layerGroup();
+    if (toggle.checked) layers[key].addTo(map);
+    toggle.onchange = () => toggle.checked ? layers[key].addTo(map) : map.removeLayer(layers[key]);
+  }
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+  }).on('loading', () => {
+    tileFailed = false;
+    updateMapNote();
+  }).on('tileerror', () => {
+    tileFailed = true;
+    updateMapNote();
+  }).addTo(map);
+} else {
+  for (const key of Object.keys(layerStyles)) lookup(key+'-toggle').disabled = true;
+}
+updateMapNote();
+fitTrip.onclick = () => {
+  if (tripBounds?.isValid()) map.fitBounds(tripBounds, {padding:[28,28], maxZoom:17, animate:false});
+};
+const endpoint = () => address.value.trim().replace(/\/+$/, '');
+const format = new Intl.NumberFormat();
+let connectedAddress = null;
+let prediction = null;
+let hasMatched = false;
+async function request(base, path, signal) {
+  const response = await fetch(base+path, {signal});
+  if (!response.ok) throw Error('API returned HTTP '+response.status);
   return response.json();
 }
-document.querySelector('#connect').onclick = async () => {
-  run.disabled = true;
-  trips.replaceChildren();
-  try {
-    for (const trip of await request('/trips')) trips.add(new Option(trip, trip));
-    statusLine.textContent = trips.length + ' trips available.';
-    run.disabled = !trips.length;
-  } catch (error) { statusLine.textContent = error.message; }
+function setConnection(live) {
+  connection.dataset.live = live;
+  connection.textContent = live ? '● API connected' : '○ API not connected';
+}
+function clear() {
+  for (const layer of Object.values(layers)) layer.clearLayers();
+  tripBounds = null;
+  fitTrip.disabled = true;
+  mapEmpty = false;
+  updateMapNote();
+  metrics.replaceChildren();
+  title.textContent = 'Select a trip';
+}
+address.oninput = () => {
+  prediction?.abort(); hasMatched = false;
+  connectedAddress = null; setConnection(false); run.disabled = true; trips.disabled = true; clear();
+  statusLine.textContent = 'Load trips from the new API address.';
 };
-run.onclick = async () => {
-  run.disabled = true;
-  map.replaceChildren();
-  statusLine.textContent = 'Matching route…';
+connect.onclick = async () => {
+  const base = endpoint();
+  hasMatched = false;
+  connectedAddress = null; run.disabled = true; trips.disabled = true; connect.disabled = true;
+  trips.replaceChildren(); clear(); setConnection(false);
+  statusLine.textContent = 'Loading trips…';
   try {
-    const result = await request('/predict/' + encodeURIComponent(trips.value));
-    const points = result.gps.concat(result.segments.flat());
-    const longitude = points.map(point => point[0]);
-    const latitude = points.map(point => point[1]);
-    const west = Math.min(...longitude), east = Math.max(...longitude);
-    const south = Math.min(...latitude), north = Math.max(...latitude);
-    const longitudeScale = Math.cos((north + south) * Math.PI / 360);
-    const zoom = Math.min(850 / Math.max((east-west)*longitudeScale, 1e-8),
-                          480 / Math.max(north-south, 1e-8));
-    const point = ([lon, lat]) => [450 + (lon-(west+east)/2)*longitudeScale*zoom,
-                                  265 - (lat-(south+north)/2)*zoom];
-    const draw = (tag, attributes) => {
-      const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
-      for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
-      map.append(element);
-    };
-    for (const [start, finish] of result.segments) {
-      const [x1, y1] = point(start), [x2, y2] = point(finish);
-      draw('line', {x1, y1, x2, y2, stroke: '#087f5b', 'stroke-width': 3});
+    const options = await request(base,'/trips');
+    if (endpoint() !== base) return;
+    for (const id of options) trips.add(new Option(id,id));
+    connectedAddress = base; setConnection(true);
+    run.disabled = trips.disabled = trips.length === 0;
+    statusLine.textContent = trips.length+' trips available';
+  } catch (error) { statusLine.textContent = error.message+' — check the API terminal and address.'; }
+  finally { connect.disabled = false; }
+};
+function latLng(coordinates) {
+  if (!Array.isArray(coordinates)) return null;
+  const [lon,lat] = coordinates;
+  return Number.isFinite(lon) && Number.isFinite(lat) && Math.abs(lon) <= 180 && Math.abs(lat) <= 90
+    ? [lat,lon] : null;
+}
+function renderMap(results) {
+  if (!map) return;
+  tripBounds = L.latLngBounds();
+  const gpsParts = [];
+  let part = [], firstFix = null;
+  for (const coordinates of results[0].gps ?? []) {
+    const point = latLng(coordinates);
+    if (point) {
+      firstFix ??= point;
+      tripBounds.extend(point);
+      part.push(point);
+    } else {
+      if (part.length > 1) gpsParts.push(part);
+      part = [];
     }
-    for (const gps of result.gps) {
-      const [cx, cy] = point(gps);
-      draw('circle', {cx, cy, r: 1.6, fill: '#4263eb', opacity: .55});
+  }
+  if (part.length > 1) gpsParts.push(part);
+  if (gpsParts.length) {
+    L.polyline(gpsParts, {...layerStyles.gps, pane:'gps', interactive:false}).addTo(layers.gps);
+  } else if (firstFix) {
+    L.circleMarker(firstFix, {...layerStyles.gps, pane:'gps', radius:4, interactive:false}).addTo(layers.gps);
+  }
+  for (const result of results) {
+    const segments = [];
+    for (const segment of result.segments ?? []) {
+      const start = latLng(segment?.[0]), end = latLng(segment?.[1]);
+      if (!start || !end) continue;
+      segments.push([start,end]);
+      tripBounds.extend(start).extend(end);
     }
-    const accuracy = result.accuracy === null ? 'unavailable' : (100*result.accuracy).toFixed(1) + '%';
-    statusLine.textContent = 'Trip ' + result.trip_id + ' • ' + result.gps.length +
-      ' observations • Reference agreement: ' + accuracy +
-      ' • Inference: ' + result.inference_seconds.toFixed(2) + ' s';
-  } catch (error) { statusLine.textContent = error.message; }
-  finally { run.disabled = false; }
+    if (segments.length) L.polyline(segments, {
+      ...layerStyles[result.mode], pane:result.mode, smoothFactor:0, interactive:false,
+    }).addTo(layers[result.mode]);
+  }
+  mapEmpty = !tripBounds.isValid();
+  updateMapNote();
+  fitTrip.disabled = mapEmpty;
+  if (!mapEmpty) fitTrip.onclick();
+}
+function card(label,value) {
+  if (value==null) return;
+  const item=document.createElement('div'); item.className='card';
+  const key=document.createElement('small'), val=document.createElement('strong');
+  key.textContent=label; val.textContent=value; item.append(key,val); metrics.append(item);
+}
+const percent = number => number==null?null:(100*number).toFixed(2)+'%';
+run.onclick = async () => {
+  if (!connectedAddress) return;
+  prediction?.abort();
+  const currentPrediction = new AbortController();
+  prediction = currentPrediction;
+  hasMatched = true;
+  const base=connectedAddress, selectedTrip=trips.value, selectedModel=model.value;
+  const modes=mode.value==='compare'?['classifier','viterbi']:[mode.value];
+  clear(); run.disabled=true; connect.disabled=true; statusLine.textContent='Matching route…';
+  try {
+    const results=await Promise.all(modes.map(current => request(base,
+      '/predict/'+encodeURIComponent(selectedTrip)+'?'+new URLSearchParams({model:selectedModel,mode:current}),
+      currentPrediction.signal)));
+    if (currentPrediction.signal.aborted) return;
+    renderMap(results);
+    const label=model.selectedOptions[0].textContent;
+    title.textContent='Trip '+selectedTrip+' · '+label;
+    statusLine.textContent='Prediction complete';
+    card('GPS observations',format.format(results[0].gps_count));
+    card('Unique candidate arcs',format.format(results[0].candidate_arc_count));
+    for (const result of results) {
+      const prefix=result.mode==='classifier'?'Classifier · ':'Viterbi · ';
+      card(prefix+'Matched arcs',format.format(result.matched_arc_count));
+      card(prefix+'Point agreement',percent(result.accuracy));
+      card(prefix+'Macro F1',result.macro_f1?.toFixed(4));
+      card(prefix+'Route continuity',percent(result.route_continuity));
+      card(prefix+'Inference time',(result.inference_seconds*1000).toFixed(1)+' ms');
+    }
+  } catch (error) {
+    if (!currentPrediction.signal.aborted) statusLine.textContent=error.message+' — check the API terminal.';
+  } finally {
+    if (prediction === currentPrediction) {
+      prediction = null; run.disabled=!connectedAddress; connect.disabled=false;
+    }
+  }
+};
+for (const control of [trips,model,mode]) control.onchange = () => {
+  if (hasMatched && connectedAddress) run.onclick();
 };
 </script>

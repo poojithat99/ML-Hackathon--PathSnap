@@ -1,120 +1,76 @@
-# PathSnap — local starter
+# PathSnap
 
-Kaggle is not required. Training and the evaluator UI run without internet after
-dependencies are installed. A two-laptop demo requires a shared LAN or hotspot,
-not an internet connection. The Folium report map normally loads browser assets
-and tiles from the internet; the generated route PNG and demo UI do not.
+PathSnap reconstructs a vehicle’s path on a directed road network from noisy, timestamped GPS fixes. Around intersections, a single fix can lie equally close to several roads or both directions of the same road. PathSnap ranks nearby arcs and uses the surrounding trajectory to resolve ambiguity.
 
-## Run on this Mac
+## Results
 
-From the workspace root:
+Each student-test number averages ten trips equally. Point agreement is the fraction of fixes assigned the same directed arc as an approximate reference-derived point label. These are development metrics. Official evaluator performance is unknown.
 
-```sh
-python3 train.py
-PYTHONPATH=.deps python3 visualize_results.py
-PYTHONPATH=.deps python3 -m uvicorn api:app --host 0.0.0.0 --port 8000
-```
+| Pipeline | Grouped CV Macro F1 | Student agreement | Student Macro F1 | Student continuity |
+|---|---:|---:|---:|---:|
+| Original logistic + Viterbi | .5967 | 78.65% | .6278 | 99.60% |
+| Improved logistic + motion-aware Viterbi | .7537 | 85.70% | .7575 | 99.55% |
+| Random forest + endpoint penalty | .8222 | 88.84% | .8335 | 98.41% |
+| Logistic + predicted-route refinement | .9070 | 94.28% | .9263 | 94.46% |
 
-This workspace already has the training dependencies and uses `.deps` for
-FastAPI and Folium. On a fresh laptop that will train or host the API, create a
-virtual environment and run `python3 -m pip install -r requirements.txt`
-once, then omit `PYTHONPATH=.deps`. Use the same scikit-learn version as the
-training run (1.7.2) when loading the saved model.
+Choose the forest for the strongest agreement among configurations meeting the grouped CV continuity floor of 98%. Choose the refined route for point-proxy agreement. Its second pass can create disconnected transitions. [Full comparison and limitations](reports/final_results.md)
 
-On laptop 2, copy the `ui/` directory and run:
+## Pipeline
 
-```sh
-python3 -m http.server 8080 --directory ui
-```
+1. Validate the timestamps and directed graph. Project longitude and latitude into local metres around the first observation.
+2. Retrieve nearby road midpoints and interior samples using spatial indexes. Rerank the shortlist by distance to the finite segment. The improved and both research models keep up to 16 eligible candidates within 35 m and retain the closest when the radius is empty.
+3. Score each candidate from distance, directed heading alignment, arc length and speed. The improved logistic model adds forward and smoothed alignment. The forest also uses transformed and relative distance, endpoint clearance and neighbouring-fix support.
+4. Decode a sequence using log classifier probabilities, graph adjacency and motion consistency. The research decoder also penalizes disconnected transitions by endpoint separation. The agreement model then reassigns each fix to the nearest eligible arc visited on its own decoded path. All inference inputs come from the track and road graph.
+5. FastAPI returns directed arc IDs, segment coordinates and per-trip metrics. The Leaflet dashboard displays GPS and both prediction modes. Development reference metrics are computed after prediction.
 
-Open `http://localhost:8080`. Enter `http://<laptop-1-LAN-IP>:8000`,
-click **Load trips**, choose a trip, then click **Match route**. For a one-laptop
-rehearsal, use the default API address. The API terminal logs requests.
+## Install and run
 
-## Data and scoring
-
-- The default demo uses the 10 supplied student-test trips. Training uses
-  80 training trips, with three trip-grouped folds and a fixed seed.
-- Each observation uses up to 8 nearby directed segments. The spatial index
-  shortlists 48 segment midpoints; exact point-to-segment distances then rank
-  the shortlist. This may miss long segments. Distance, heading agreement,
-  segment length and GPS speed are features.
-- The provided reference contains a route sequence, not pointwise labels.
-  This starter derives a proxy label by choosing the closest reference segment
-  for each GPS point. Parallel roads, overlapping directions and loops can
-  produce ambiguous labels because this alignment does not enforce route order.
-- Viterbi uses log classifier probabilities and a penalty for arc pairs that
-  neither stay on the same arc nor connect end-to-start. Gaps over 15 seconds
-  restart decoding. The decoder does not insert intermediate routing arcs.
-- Scores average across trips. Top-1 and macro F1 use proxy arc IDs; log loss
-  is binary over candidate rows. Sequence similarity compares sequences after
-  collapsing consecutive repeated arcs. Continuity excludes large GPS gaps.
-
-For the final demo, get the reserved data and scoring convention from the
-organizers. The API expects trip folders with matching numeric filenames.
-Set `PATHSNAP_TRIPS` to the reserved trip directory and
-`PATHSNAP_REFERENCES` to the private directory containing
-`<trip-id>/<trip-id>.route` files. The backend reads those files only after
-prediction; it returns aggregate reference agreement, never the labels. If
-the organizers supply a different scoring format, adapt the scoring separately.
-Do not include raw data or evaluator references in the public repository.
-
-## Controlled improvement experiments
-
-The baseline in `results/` and the original training command remain available.
-See `EXPERIMENT_AUDIT.md` for the original pipeline analysis. To reproduce the
-new experiments without overwriting the saved runs, use a fresh output folder:
+Use Python 3.14 and the commands below from the repository root. Use editable installation so the application can locate its bundled models and the checkout dashboard.
 
 ```sh
-python3 -u experiments.py --output results_repeat
-python3 experiments.py --output results_repeat --benchmark-candidates
-PYTHONPATH=.deps python3 visualize_results.py --improved results_repeat
-python3 -m unittest -v test_pathsnap
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[test]'
 ```
 
-The runner compares feature ablations, candidate counts/indices/radii, the
-five original classifiers plus weighted logistic, random forest, and two
-boosting variants. It saves TPE trials, decoder sweeps, experiment configs,
-fold assignments, dependency versions, and per-trip metrics. All selection
-uses the same three training folds. Decoder selection prefers configurations
-with at least 98% CV continuity, then maximizes macro F1. Student testing
-runs after selection and includes the original pipeline and stage winners;
-it is a development comparison, not official evaluator scoring.
+Place the supplied student data under `Student folder/train/<id>/` and `Student folder/student_test/<id>/`, or export `PATHSNAP_DATA` pointing at the parent of both splits. Preserve zero-padded IDs. Each folder contains matching `.track` (lon, lat, seconds), `.nodes` (lon, lat) and `.arcs` (directed node indices) files. Training and student scoring also use the ordered `.route` arc indices. Supply only permitted data locally. To serve unlabeled inputs use `PATHSNAP_TRIPS`.
 
-The candidate radius is a filter after the spatial shortlist. If no arc is
-within the radius, the closest shortlisted arc remains available. Sampled
-search augments midpoint indexing with interior segment samples. Whole-trip
-heading features may use following observations, so the model is for batch
-matching, not real-time streaming. Candidate log loss is binary over eligible
-candidate rows and should not be compared directly across changed candidate sets.
-Continuity always uses the same 15 s evaluation cutoff, regardless of decoder
-gap settings. Inference time in the experiment logs covers scoring/decoding,
-not data loading; the separate preparation time includes filesystem reads.
-
-Use the improved artifact explicitly; the default API still serves the
-original model. Restart the backend to switch artifacts:
+Start each server in a separate terminal in the checkout.
 
 ```sh
-PATHSNAP_ARTIFACTS=results_improved PYTHONPATH=.deps python3 -m uvicorn api:app --host 0.0.0.0 --port 8000
+python -m uvicorn api:app --host 127.0.0.1 --port 8000
 ```
 
-See `results_improved/comparison.csv` for the baseline-to-final comparison,
-`paired_student_deltas.json` for exploratory paired trip-bootstrap intervals,
-and `development_map.html` in that folder for baseline/selected route layers.
-The ten-trip bootstrap intervals are descriptive and do not account for all
-model-selection uncertainty or the approximate labels.
+```sh
+python -m http.server 8080 --bind 127.0.0.1 --directory ui
+```
 
-## Report and submission checklist
+Open http://localhost:8080 and load trips. Bare API requests use Original unless `PATHSNAP_ARTIFACTS` points elsewhere. The dashboard initially selects Improved. The model selector also offers both research pipelines. Mode choices are classifier, Viterbi and a side-by-side metrics comparison. The refined model's Viterbi mode includes its second pass. For LAN origins, remote deployments and browser recovery see [demo instructions](DEMO_INSTRUCTIONS.md).
 
-- Use `results/dataset_inventory.csv` and add your own EDA observations and
-  data-quality analysis.
-- Use `results/metrics.json`, per-trip CSVs and `results/model_comparison.png`
-  for the five model comparisons. Explain what the actual results show.
-- Use `results/tuning_trials.csv` and the tuned/untuned and Viterbi comparisons.
-- Open `results/development_map.html` for the required Folium screenshot.
-  `results/development_route.png` is an offline preview, not a Folium screenshot.
-- Capture the working UI and receiving laptop's API terminal. Test the real
-  laptop-to-laptop connection before evaluation.
-- Submit one public repository including source, logs, config and model, plus
-  one consolidated PDF written in your own words. Disclose assistance as
-  required by the event; report the proxy-label limitation explicitly.
+```sh
+curl -fsS 'http://localhost:8000/trips'
+curl -fsS 'http://localhost:8000/predict/00000007?model=agreement&mode=viterbi'
+```
+
+## Reproduce and inspect
+
+```sh
+python -m unittest discover -v
+PATHSNAP_TEST_STUDENT=1 python -m unittest discover -v
+python benchmark.py --seed 42 --output results_repeat
+python analyze_errors.py --output reports
+```
+
+The benchmark trains, selects, exports both winners and evaluates them on student-test. Use a fresh output directory. For the historical runs use `python train.py --output results_recheck` and `python experiments.py --output historical_repeat` with fresh directories. Candidate preprocessing is deterministic per trip. Scalers and classifiers fit on fold-training trips only. See [reproduction notes](reports/final_results.md) for objectives, timing scope and lookahead.
+
+| Location | Contents |
+|---|---|
+| `pathsnap_core/`, `pathsnap.py` | Geometry, candidate search, observations, sequential decoding, separate proxy scoring, compatibility imports |
+| `train.py`, `experiments.py`, `benchmark.py` | Original training, historical staged search and final grouped comparisons |
+| `results/`, `results_improved/` | Frozen original and improved bundles and evidence |
+| `results_final/`, `results_final/agreement/` | Continuity-constrained and agreement-selected bundles, configurations and measurements |
+| `api.py`, `ui/` | FastAPI service and web map |
+| `tests/`, `test_pathsnap.py` | API, artifact, inference and ML regression checks |
+| `reports/`, `analyze_errors.py`, `visualize_results.py` | Comparison, failure analysis and visualization |
+
+Team PT-047 comprises Piyush S, Piyush G Nadgir, Poojitha T and Poorvi Rangaswamy. Contributor attribution is recorded in Git. Dataset redistribution rights and a project license have not been supplied.
