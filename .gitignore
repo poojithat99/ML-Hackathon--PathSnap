@@ -1,0 +1,7 @@
+.DS_Store
+__pycache__/
+.deps/
+.venv/
+Student folder/
+PathSnap_student_materials/
+evaluator_test/
