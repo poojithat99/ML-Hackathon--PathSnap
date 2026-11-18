@@ -5,3 +5,26 @@ __pycache__/
 Student folder/
 PathSnap_student_materials/
 evaluator_test/
+evaluator_test.zip
+*.track
+*.arcs
+*.nodes
+*.route
+.env
+.env.*
+*.pem
+*.key
+.pytest_cache/
+results_recheck/
+results_repeat/
+*.log
+*.zip
+*.pyc
+.cache/
+build/
+dist/
+*.egg-info/
+results*/development_map.html
+data/raw/
+.envrc
+!/.env.example

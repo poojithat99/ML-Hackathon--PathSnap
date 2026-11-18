@@ -1,0 +1,10 @@
+condition,fixes,errors,error_rate
+all,208417,48383,0.2321451704995274
+missing proxy candidate,23393,23393,1.0
+reverse directed arc chosen,11961,11961,1.0
+junction arc (degree >=3),107798,36079,0.3346908105901779
+competing parallel arc within 10m,41938,10388,0.24769898421479328
+turn above 60 degrees,83630,28246,0.3377496113834748
+turn above 150 degrees,24192,10624,0.43915343915343913
+GPS interval over 6s,997,278,0.27883650952858574
+nearest candidate over 20m,23269,19843,0.8527654819717221
