@@ -1,0 +1,11 @@
+{
+  "features": [
+    "distance_m",
+    "heading_agreement",
+    "segment_length_m",
+    "gps_speed_mps"
+  ],
+  "candidates": 8,
+  "gap_seconds": 15,
+  "jump_penalty": 4.0
+}

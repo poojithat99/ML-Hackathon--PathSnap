@@ -1,0 +1,134 @@
+{
+  "logistic": {
+    "cv_macro_f1": 0.539326157641707,
+    "cv_folds": [
+      0.5643054086936307,
+      0.5142031222889449,
+      0.5394699419425455
+    ],
+    "cv_and_fit_seconds": 0.570045124986791,
+    "student_test": {
+      "top1": 0.7612748963035006,
+      "macro_f1": 0.5592157916286744,
+      "candidate_log_loss": 0.2228942029466562,
+      "candidate_miss": 0.013996892056911561,
+      "continuity": 0.8602501018241435,
+      "sequence_similarity": 0.6057003842025315,
+      "inference_seconds": 0.00036982490128139033
+    },
+    "config": "Pipeline(steps=[('standardscaler', StandardScaler()),\n                ('logisticregression',\n                 LogisticRegression(C=1, max_iter=150, random_state=42))])"
+  },
+  "naive_bayes": {
+    "cv_macro_f1": 0.32352560528033897,
+    "cv_folds": [
+      0.3021314681566758,
+      0.29579186141698605,
+      0.37265348626735506
+    ],
+    "cv_and_fit_seconds": 0.4783040420006728,
+    "student_test": {
+      "top1": 0.5713345578526772,
+      "macro_f1": 0.3175369522390507,
+      "candidate_log_loss": 0.3964233490033152,
+      "candidate_miss": 0.013996892056911561,
+      "continuity": 0.7730272018249429,
+      "sequence_similarity": 0.47641162712138774,
+      "inference_seconds": 0.0009984457996324637
+    },
+    "config": "GaussianNB()"
+  },
+  "tree": {
+    "cv_macro_f1": 0.5149200432048623,
+    "cv_folds": [
+      0.541437485907352,
+      0.5022844032760706,
+      0.5010382404311642
+    ],
+    "cv_and_fit_seconds": 2.694659665998188,
+    "student_test": {
+      "top1": 0.7570359129288742,
+      "macro_f1": 0.5283184908548951,
+      "candidate_log_loss": 0.18123096000601951,
+      "candidate_miss": 0.013996892056911561,
+      "continuity": 0.8752845041480046,
+      "sequence_similarity": 0.6022214179702061,
+      "inference_seconds": 0.00042390820162836463
+    },
+    "config": "DecisionTreeClassifier(max_depth=8, random_state=42)"
+  },
+  "extra_trees": {
+    "cv_macro_f1": 0.4817993635606658,
+    "cv_folds": [
+      0.502850502736613,
+      0.4741882707575123,
+      0.46835931718787205
+    ],
+    "cv_and_fit_seconds": 2.91006495799229,
+    "student_test": {
+      "top1": 0.7325542530825276,
+      "macro_f1": 0.5115127257470744,
+      "candidate_log_loss": 0.2286452179614095,
+      "candidate_miss": 0.013996892056911561,
+      "continuity": 0.8462495536092988,
+      "sequence_similarity": 0.5807393117680743,
+      "inference_seconds": 0.013107012398540974
+    },
+    "config": "ExtraTreesClassifier(max_depth=10, n_estimators=24, n_jobs=2, random_state=42)"
+  },
+  "hist_boost": {
+    "cv_macro_f1": 0.5207507090757324,
+    "cv_folds": [
+      0.55026232414591,
+      0.5078022587821146,
+      0.5041875442991727
+    ],
+    "cv_and_fit_seconds": 1.9523216249945108,
+    "student_test": {
+      "top1": 0.7544047635085149,
+      "macro_f1": 0.5388954570116941,
+      "candidate_log_loss": 0.17654018814663563,
+      "candidate_miss": 0.013996892056911561,
+      "continuity": 0.88199284568656,
+      "sequence_similarity": 0.6066010855957714,
+      "inference_seconds": 0.0070163874988793395
+    },
+    "config": "HistGradientBoostingClassifier(early_stopping=False, max_iter=50,\n                               max_leaf_nodes=15, random_state=42)"
+  },
+  "tuned": {
+    "cv_macro_f1": 0.5393297496717283,
+    "cv_folds": [
+      0.5644233088630429,
+      0.5141846421369052,
+      0.5393812980152372
+    ],
+    "cv_and_fit_seconds": 0.5482150000025285,
+    "student_test": {
+      "top1": 0.7613893127794732,
+      "macro_f1": 0.5592421868994439,
+      "candidate_log_loss": 0.22280655693616339,
+      "candidate_miss": 0.013996892056911561,
+      "continuity": 0.8602339304071231,
+      "sequence_similarity": 0.6058090242826728,
+      "inference_seconds": 0.0003723003013874404
+    },
+    "config": "Pipeline(steps=[('standardscaler', StandardScaler()),\n                ('logisticregression',\n                 LogisticRegression(C=7.114476009343418, max_iter=150,\n                                    random_state=42))])"
+  },
+  "tuning": {
+    "model": "logistic",
+    "best_params": {
+      "strength": 7.114476009343418
+    },
+    "seconds": 3.4737780829891562,
+    "seed": 42,
+    "stride": 5
+  },
+  "tuned_viterbi": {
+    "top1": 0.7865357297265361,
+    "macro_f1": 0.6278341253704461,
+    "candidate_log_loss": 0.22280655693616339,
+    "candidate_miss": 0.013996892056911561,
+    "continuity": 0.995991827090824,
+    "sequence_similarity": 0.6753554266256235,
+    "inference_seconds": 0.010627758500049822
+  }
+}
