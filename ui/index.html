@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PathSnap • Route Evaluation</title>
+<style>
+body { font: 16px system-ui, sans-serif; max-width: 960px; margin: 3rem auto; padding: 0 1rem; color: #172b36; background: #f5f8fa; }
+input, button, select { font: inherit; padding: .5rem; margin: .25rem; }
+svg { width: 100%; background: white; border: 1px solid #d5dfe4; border-radius: 10px; }
+</style>
+<h1>PathSnap</h1>
+<label>API address <input id="address" value="http://127.0.0.1:8000"></label>
+<button id="connect">Load trips</button>
+<label>Trip <select id="trips"></select></label>
+<button id="run" disabled>Match route</button>
+<p id="status" role="status">Connect to the API to get started.</p>
+<p><span style="color:#4263eb">● GPS</span> · <span style="color:#087f5b">━ Predicted road segments</span></p>
+<svg id="map" viewBox="0 0 900 530" aria-label="GPS and predicted route"></svg>
+<script>
+const address = document.querySelector('#address');
+const trips = document.querySelector('#trips');
+const statusLine = document.querySelector('#status');
+const map = document.querySelector('#map');
+const run = document.querySelector('#run');
+async function request(path) {
+  const response = await fetch(address.value.trim().replace(/\/$/, '') + path);
+  if (!response.ok) throw Error('API returned HTTP ' + response.status);
+  return response.json();
+}
+document.querySelector('#connect').onclick = async () => {
+  run.disabled = true;
+  trips.replaceChildren();
+  try {
+    for (const trip of await request('/trips')) trips.add(new Option(trip, trip));
+    statusLine.textContent = trips.length + ' trips available.';
+    run.disabled = !trips.length;
+  } catch (error) { statusLine.textContent = error.message; }
+};
+run.onclick = async () => {
+  run.disabled = true;
+  map.replaceChildren();
+  statusLine.textContent = 'Matching route…';
+  try {
+    const result = await request('/predict/' + encodeURIComponent(trips.value));
+    const points = result.gps.concat(result.segments.flat());
+    const longitude = points.map(point => point[0]);
+    const latitude = points.map(point => point[1]);
+    const west = Math.min(...longitude), east = Math.max(...longitude);
+    const south = Math.min(...latitude), north = Math.max(...latitude);
+    const longitudeScale = Math.cos((north + south) * Math.PI / 360);
+    const zoom = Math.min(850 / Math.max((east-west)*longitudeScale, 1e-8),
+                          480 / Math.max(north-south, 1e-8));
+    const point = ([lon, lat]) => [450 + (lon-(west+east)/2)*longitudeScale*zoom,
+                                  265 - (lat-(south+north)/2)*zoom];
+    const draw = (tag, attributes) => {
+      const element = document.createElementNS('http://www.w3.org/2000/svg', tag);
+      for (const [key, value] of Object.entries(attributes)) element.setAttribute(key, value);
+      map.append(element);
+    };
+    for (const [start, finish] of result.segments) {
+      const [x1, y1] = point(start), [x2, y2] = point(finish);
+      draw('line', {x1, y1, x2, y2, stroke: '#087f5b', 'stroke-width': 3});
+    }
+    for (const gps of result.gps) {
+      const [cx, cy] = point(gps);
+      draw('circle', {cx, cy, r: 1.6, fill: '#4263eb', opacity: .55});
+    }
+    const accuracy = result.accuracy === null ? 'unavailable' : (100*result.accuracy).toFixed(1) + '%';
+    statusLine.textContent = 'Trip ' + result.trip_id + ' • ' + result.gps.length +
+      ' observations • Reference agreement: ' + accuracy +
+      ' • Inference: ' + result.inference_seconds.toFixed(2) + ' s';
+  } catch (error) { statusLine.textContent = error.message; }
+  finally { run.disabled = false; }
+};
+</script>
